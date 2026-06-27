@@ -1,6 +1,6 @@
 /*
 flowGrid.js
-Contains nominal velocity field construction (first pass) extracted from flowCore.js.
+Contains nominal velocity field construction (first pass).
 */
 import * as obstacle from "./obstacle.js";
 
@@ -10,7 +10,6 @@ export function computeNominalField(opts = {}) {
     baseWindSpeed, crosswindVec, vortexStrengthGlobal, turbulenceGlobal, obstacleData, obstacleBounds
   } = opts;
 
-  // replicate nominal velocity generation previously inline
   for (let gy = 0; gy < gridRows; gy++) {
     for (let gx = 0; gx < gridCols; gx++) {
       const cx = (gx + 0.5) * GRID_SIZE;
@@ -55,17 +54,29 @@ export function computeNominalField(opts = {}) {
       if (repWeight > 0) {
         repX /= repWeight;
         repY /= repWeight;
-        // reduced repulsion so flow stays closer and collides more with the obstacle
         vx += repX * 2.0;
         vy += repY * 2.0;
       }
 
       if (obstacleBounds) {
         const oCenterX = obstacleBounds.x + obstacleBounds.w * 0.5;
+        const oCenterY = obstacleBounds.y + obstacleBounds.h * 0.5;
+        const relX = cx - oCenterX;
+        const relY = cy - oCenterY;
+        
+        // PHYSICS ADD: Base flow velocity deficit (Wake region) 
+        if (relX > 0 && relX < obstacleBounds.w * 4.0) {
+          const wakeFall = Math.exp(-relX / Math.max(1, obstacleBounds.w * 1.5));
+          const latFall = Math.exp(-Math.pow(relY / Math.max(1, obstacleBounds.h * 0.5), 2));
+          const deficit = 0.6 * wakeFall * latFall;
+          vx *= (1 - deficit);
+          vy *= (1 - deficit);
+        }
+
         if (cx > oCenterX) {
-          const relX = (cx - oCenterX) / Math.max(1, width - oCenterX);
-          const swirlStrength = Math.exp(-relX * 3) * 1.0 * vortexStrengthGlobal;
-          const above = cy < obstacleBounds.y + obstacleBounds.h * 0.5 ? -1 : 1;
+          const normRelX = relX / Math.max(1, width - oCenterX);
+          const swirlStrength = Math.exp(-normRelX * 3) * 1.0 * vortexStrengthGlobal;
+          const above = cy < oCenterY ? -1 : 1;
           const phase = Math.sin((cx * 0.06) + (cy * 0.03));
           vx += -above * phase * swirlStrength * 1.2;
           vy += phase * swirlStrength * 1.2;
@@ -83,4 +94,3 @@ export function computeNominalField(opts = {}) {
     }
   }
 }
-
